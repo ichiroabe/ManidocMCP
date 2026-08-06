@@ -27,6 +27,23 @@ AIエージェントの「永続的な知識置き場・成果物置き場」と
 | キャッシュヒント | `tools/list` は `ttlMs`（60分）と `cacheScope` を返し、ツールは名前順の決定的な順序で返します |
 | ログ | 仕様で logging 機能が非推奨になったため、診断ログは stderr に出力します（stdout は JSON-RPC 専用） |
 
+## リリース成果物
+
+`v*` タグを push すると GitHub Actions が以下をビルドして Release に添付します。いずれも
+self-contained（.NET ランタイム同梱）の単一実行ファイルなので、**.NET SDK なしで動きます**。
+
+| ファイル | 対象 |
+| --- | --- |
+| `ManidocMCP-osx-arm64.tar.gz` | macOS / Apple Silicon |
+| `ManidocMCP-osx-x64.tar.gz` | macOS / Intel |
+| `ManidocMCP-win-x64.zip` | Windows / x64 |
+| `ManidocMCP-win-arm64.zip` | Windows / Arm64 |
+
+本体は `net8.0` でプラットフォーム依存のコードを持たないため、同じソースが macOS でも
+Windows でも動きます。ソースからビルドしたい場合は下記の手順に従ってください。
+
+> Windows で動画生成機能まで使いたい場合は [manidocMCP_CS](https://github.com/ichiroabe/manidocMCP_CS) を使ってください。
+
 ## 必要なもの
 
 | 項目 | 内容 |

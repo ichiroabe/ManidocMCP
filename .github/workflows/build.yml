@@ -13,11 +13,17 @@ permissions:
 
 jobs:
   build:
-    runs-on: macos-latest
+    # macOS 版は macOS ランナー、Windows 版は Windows ランナーでネイティブにビルドする。
+    # 配布形式も各 OS の慣習に合わせる（macOS: tar.gz / Windows: zip）。
+    runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
       matrix:
-        rid: [osx-arm64, osx-x64]
+        include:
+          - { rid: osx-arm64, os: macos-latest }
+          - { rid: osx-x64, os: macos-latest }
+          - { rid: win-x64, os: windows-latest }
+          - { rid: win-arm64, os: windows-latest }
 
     steps:
       - uses: actions/checkout@v7
@@ -36,6 +42,7 @@ jobs:
       # タグが無いビルドでは csproj の <Version> をそのまま使う。
       - name: Resolve version
         id: version
+        shell: bash
         run: |
           if [[ "${GITHUB_REF}" == refs/tags/v* ]]; then
             echo "value=${GITHUB_REF#refs/tags/v}" >> "$GITHUB_OUTPUT"
@@ -44,24 +51,35 @@ jobs:
           fi
 
       - name: Publish (self-contained, single file)
+        shell: bash
         run: |
-          ARGS=(-c Release -r ${{ matrix.rid }} --self-contained true
-                -o "dist/${{ matrix.rid }}" -p:PublishSingleFile=true)
+          VERSION_ARG=""
           if [[ -n "${{ steps.version.outputs.value }}" ]]; then
-            ARGS+=(-p:Version=${{ steps.version.outputs.value }})
+            VERSION_ARG="-p:Version=${{ steps.version.outputs.value }}"
           fi
-          dotnet publish "${ARGS[@]}"
+          dotnet publish -c Release -r ${{ matrix.rid }} --self-contained true \
+            -o "dist/${{ matrix.rid }}" -p:PublishSingleFile=true $VERSION_ARG
 
-      - name: Package
+      - name: Package (tar.gz)
+        if: runner.os == 'macOS'
+        shell: bash
         run: |
           cd "dist/${{ matrix.rid }}"
           chmod +x ManidocMCP
           tar -czf "../ManidocMCP-${{ matrix.rid }}.tar.gz" ManidocMCP appsettings.json
 
+      - name: Package (zip)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          Compress-Archive `
+            -Path "dist/${{ matrix.rid }}/ManidocMCP.exe", "dist/${{ matrix.rid }}/appsettings.json" `
+            -DestinationPath "dist/ManidocMCP-${{ matrix.rid }}.zip"
+
       - uses: actions/upload-artifact@v7
         with:
           name: ManidocMCP-${{ matrix.rid }}
-          path: dist/ManidocMCP-${{ matrix.rid }}.tar.gz
+          path: dist/ManidocMCP-${{ matrix.rid }}.*
           if-no-files-found: error
 
   release:
@@ -85,4 +103,4 @@ jobs:
             --repo "${GITHUB_REPOSITORY}" \
             --title "${GITHUB_REF#refs/tags/}" \
             --generate-notes \
-            dist/*.tar.gz
+            dist/*
