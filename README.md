@@ -13,6 +13,20 @@
 AIエージェントの「永続的な知識置き場・成果物置き場」として機能します。API キー不要で、ローカル LLM とも連携できます。
 ※ 動画生成機能は Windows 版（[manidocMCP_CS](https://github.com/ichiroabe/manidocMCP_CS)）のみです。
 
+## 対応する MCP 仕様
+
+最新仕様 **2026-07-28** に対応しています（C# SDK `ModelContextProtocol` 2.1.0）。
+
+| 項目 | 対応内容 |
+| --- | --- |
+| プロトコル | 2026-07-28。`initialize` ハンドシェイクを持たないステートレス方式で、各リクエストが `_meta` でバージョンとクライアント能力を宣言します |
+| `server/discover` | 対応。クライアントは接続前にサーバーの対応バージョン・能力・識別情報を取得できます |
+| 後方互換 | 2025-11-25 以前のクライアント（従来の `initialize` ハンドシェイク）もそのまま接続できます |
+| 構造化出力 | 全ツールが `outputSchema` を宣言し、結果を `structuredContent` として返します（従来どおりテキストも同時に返すため、古いクライアントでも読めます） |
+| ツール注釈 | 全ツールが `readOnlyHint` / `destructiveHint` / `idempotentHint` / `openWorldHint` を宣言します |
+| キャッシュヒント | `tools/list` は `ttlMs`（60分）と `cacheScope` を返し、ツールは名前順の決定的な順序で返します |
+| ログ | 仕様で logging 機能が非推奨になったため、診断ログは stderr に出力します（stdout は JSON-RPC 専用） |
+
 ## 必要なもの
 
 | 項目 | 内容 |
@@ -68,15 +82,17 @@ bash installer/install.sh
 
 ## MCP ツール一覧
 
-| ツール | 機能 |
-| --- | --- |
-| `get_server_status` | サーバー状態の確認（ワークスペース・プロジェクト数） |
-| `list_projects` | プロジェクト一覧 |
-| `list_nodes` | プロジェクト内のノード一覧 |
-| `get_article` / `save_article` | ID 指定で記事の取得・保存 |
-| `get_article_by_title` / `save_article_by_title` | タイトル指定で記事の取得・保存 |
-| `import_markdown_as_project` | Markdown をプロジェクトとして一括インポート |
-| `search_fulltext` | 全文検索 |
+| ツール | 機能 | 注釈 |
+| --- | --- | --- |
+| `get_server_status` | サーバー状態の確認（ワークスペース・プロジェクト数） | 読み取り専用 |
+| `list_projects` | プロジェクト一覧 | 読み取り専用 |
+| `list_nodes` | プロジェクト内のノード一覧 | 読み取り専用 |
+| `get_article` / `get_article_by_title` | ID / タイトル指定で記事を取得 | 読み取り専用 |
+| `save_article` / `save_article_by_title` | ID / タイトル指定で記事を保存 | **上書き（destructive）** |
+| `import_markdown_as_project` | Markdown をプロジェクトとして一括インポート | 新規作成 |
+| `search_fulltext` | 全文検索 | 読み取り専用 |
+
+保存系ツールは既存の本文を丸ごと置き換えます。追記したい場合は先に `get_article` で現在の内容を取得してください。
 
 詳細な仕様・注意事項は [UserManual.md](UserManual.md)（日本語 / English）を参照してください。
 

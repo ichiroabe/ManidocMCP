@@ -23,6 +23,26 @@ Claude Desktop などのMCP対応AIクライアントと連携することで、
 
 ---
 
+### 対応する MCP 仕様
+
+MCP 仕様 **2026-07-28** に対応しています（実装は C# SDK `ModelContextProtocol` 2.1.0）。
+
+| 項目 | 対応内容 |
+| --- | --- |
+| プロトコルバージョン | 2026-07-28 |
+| 接続方式 | ステートレス。`initialize` ハンドシェイクは不要で、各リクエストが `_meta` の `io.modelcontextprotocol/protocolVersion` と `io.modelcontextprotocol/clientCapabilities` でバージョンと能力を宣言します |
+| `server/discover` | 対応。対応バージョン・サーバー能力・サーバー識別情報（名前・バージョン・説明・URL）を1回のリクエストで返します |
+| 後方互換 | 2025-11-25 以前のクライアントは従来の `initialize` ハンドシェイクでそのまま接続できます（Claude Desktop の既存設定は変更不要） |
+| 構造化出力 | 全ツールが `outputSchema` を宣言し、結果を `structuredContent` として返します。同じ内容を JSON テキストでも返すため、構造化出力に未対応のクライアントでも従来どおり読めます |
+| ツール注釈 | 全ツールが `readOnlyHint` / `destructiveHint` / `idempotentHint` / `openWorldHint` を宣言します。クライアントはこれを見て確認ダイアログの要否などを判断します |
+| キャッシュヒント | `tools/list` は `ttlMs`（60分）と `cacheScope`（private）を返します。ツールは名前順で返るため、クライアント側のキャッシュが効きます |
+| ログ | 仕様で logging 機能（`notifications/message`）が非推奨になったため、診断ログは stderr に出力します。stdout は JSON-RPC 専用です |
+| トランスポート | stdio |
+
+> トラブル時は stderr を見てください。Claude Desktop の場合は `~/Library/Logs/Claude/mcp-server-manidoc.log` に記録されます。
+
+---
+
 ### 必要なもの
 
 | 項目 | 内容 |
@@ -155,22 +175,42 @@ gemini
 
 #### サーバー確認
 
-| ツール名 | 説明 |
-| --- | --- |
-| `get_server_status` | サーバーの動作確認。ワークスペースパス・プロジェクト数を返す |
+| ツール名 | 説明 | 注釈 |
+| --- | --- | --- |
+| `get_server_status` | サーバーの動作確認。ワークスペースパス・プロジェクト数・サーバーバージョンを返す | 読み取り専用 |
+
+`get_server_status` はワークスペースが開けない場合もエラーにはせず、`ok: false` と `error` に理由を入れて返します。
 
 #### ドキュメント操作
 
-| ツール名 | 説明 |
+| ツール名 | 説明 | 注釈 |
+| --- | --- | --- |
+| `list_projects` | ワークスペース内の全プロジェクト一覧を返す | 読み取り専用 |
+| `list_nodes` | 指定プロジェクトのノード（見出し）一覧を返す | 読み取り専用 |
+| `get_article` | プロジェクトID・ノードID で記事（Markdown）を取得 | 読み取り専用 |
+| `save_article` | プロジェクトID・ノードID で記事（Markdown）を上書き保存 | 上書き（destructive） |
+| `get_article_by_title` | プロジェクト名・ノードタイトルの部分一致で記事を取得 | 読み取り専用 |
+| `save_article_by_title` | プロジェクト名・ノードタイトルの部分一致で記事を保存 | 上書き（destructive） |
+| `import_markdown_as_project` | Markdown テキストを新規プロジェクトとして一括インポート | 新規作成 |
+| `search_fulltext` | 全プロジェクトを対象にキーワード全文検索 | 読み取り専用 |
+
+> 保存系ツールは既存の本文を丸ごと置き換えます（`destructiveHint: true`）。追記したい場合は先に `get_article` で現在の内容を取得してから、結合した全文を保存してください。
+
+#### 構造化された戻り値
+
+各ツールは `structuredContent` として構造化データを返します。主なフィールドは次のとおりです。
+
+| ツール | 主なフィールド |
 | --- | --- |
-| `list_projects` | ワークスペース内の全プロジェクト一覧を返す |
-| `list_nodes` | 指定プロジェクトのノード（見出し）一覧を返す |
-| `get_article` | プロジェクトID・ノードID で記事（Markdown）を取得 |
-| `save_article` | プロジェクトID・ノードID で記事（Markdown）を上書き保存 |
-| `get_article_by_title` | プロジェクト名・ノードタイトルの部分一致で記事を取得 |
-| `save_article_by_title` | プロジェクト名・ノードタイトルの部分一致で記事を保存 |
-| `import_markdown_as_project` | Markdown テキストを新規プロジェクトとして一括インポート |
-| `search_fulltext` | 全プロジェクトを対象にキーワード全文検索 |
+| `get_server_status` | `ok`, `workspace`, `projectCount`, `serverVersion`, `error` |
+| `list_projects` | `projects[]`（`id`, `name`, `tag`）, `count` |
+| `list_nodes` | `projectId`, `projectName`, `nodes[]`（`id`, `title`, `path`）, `count` |
+| `get_article` / `get_article_by_title` | `projectId`, `projectName`, `nodeId`, `nodeTitle`, `path`, `content`, `comment` |
+| `save_article` / `save_article_by_title` | `projectId`, `nodeId`, `nodeTitle`, `previousLength`, `savedLength` |
+| `import_markdown_as_project` | `projectId`, `projectName`, `nodeCount` |
+| `search_fulltext` | `keyword`, `results[]`, `byProject[]`, `totalMatches`, `shownCount`, `hint` |
+
+正確な定義は `tools/list` が返す各ツールの `outputSchema` を参照してください。
 
 ---
 
@@ -238,6 +278,26 @@ By integrating with MCP-compatible AI clients such as Claude Desktop, you can us
 
 ---
 
+### MCP Specification Support
+
+This server implements MCP specification **2026-07-28** (via the C# SDK `ModelContextProtocol` 2.1.0).
+
+| Item | Details |
+| --- | --- |
+| Protocol version | 2026-07-28 |
+| Connection model | Stateless. There is no `initialize` handshake; every request declares its version and capabilities via `_meta` (`io.modelcontextprotocol/protocolVersion`, `io.modelcontextprotocol/clientCapabilities`) |
+| `server/discover` | Supported. Returns supported versions, server capabilities, and server identity (name, version, description, website) in one request |
+| Backward compatibility | Clients on 2025-11-25 and earlier can still connect via the legacy `initialize` handshake — no config change needed for existing Claude Desktop setups |
+| Structured output | Every tool declares an `outputSchema` and returns `structuredContent`. The same payload is also returned as JSON text, so clients without structured-output support keep working |
+| Tool annotations | Every tool declares `readOnlyHint` / `destructiveHint` / `idempotentHint` / `openWorldHint` |
+| Cache hints | `tools/list` returns `ttlMs` (60 minutes) and `cacheScope` (private), and lists tools in a deterministic name order so clients can cache it |
+| Logging | The logging feature (`notifications/message`) is deprecated by the specification, so diagnostics go to stderr. stdout carries JSON-RPC only |
+| Transport | stdio |
+
+> When troubleshooting, check stderr. With Claude Desktop it is captured in `~/Library/Logs/Claude/mcp-server-manidoc.log`.
+
+---
+
 ### Requirements
 
 | Item | Details |
@@ -301,22 +361,42 @@ Check the Manidoc server status.
 
 #### Server Status
 
-| Tool | Description |
-| --- | --- |
-| `get_server_status` | Verifies the server is running. Returns workspace path and project count. |
+| Tool | Description | Annotation |
+| --- | --- | --- |
+| `get_server_status` | Verifies the server is running. Returns workspace path, project count and server version. | read-only |
+
+`get_server_status` does not fail when the workspace cannot be opened; it returns `ok: false` with the reason in `error`.
 
 #### Document Operations
 
-| Tool | Description |
+| Tool | Description | Annotation |
+| --- | --- | --- |
+| `list_projects` | Returns a list of all projects in the workspace | read-only |
+| `list_nodes` | Returns a list of nodes (headings) in a specified project | read-only |
+| `get_article` | Retrieves an article (Markdown) by project ID and node ID | read-only |
+| `save_article` | Overwrites an article by project ID and node ID | destructive |
+| `get_article_by_title` | Retrieves an article by partial match on project name and node title | read-only |
+| `save_article_by_title` | Saves an article by partial match on project name and node title | destructive |
+| `import_markdown_as_project` | Imports Markdown text as a new project | creates new data |
+| `search_fulltext` | Full-text keyword search across all projects | read-only |
+
+> The save tools replace the article body in full (`destructiveHint: true`). To append, call `get_article` first and save the combined text.
+
+#### Structured Results
+
+Every tool returns `structuredContent`. Main fields:
+
+| Tool | Main fields |
 | --- | --- |
-| `list_projects` | Returns a list of all projects in the workspace |
-| `list_nodes` | Returns a list of nodes (headings) in a specified project |
-| `get_article` | Retrieves an article (Markdown) by project ID and node ID |
-| `save_article` | Overwrites an article by project ID and node ID |
-| `get_article_by_title` | Retrieves an article by partial match on project name and node title |
-| `save_article_by_title` | Saves an article by partial match on project name and node title |
-| `import_markdown_as_project` | Imports Markdown text as a new project |
-| `search_fulltext` | Full-text keyword search across all projects |
+| `get_server_status` | `ok`, `workspace`, `projectCount`, `serverVersion`, `error` |
+| `list_projects` | `projects[]` (`id`, `name`, `tag`), `count` |
+| `list_nodes` | `projectId`, `projectName`, `nodes[]` (`id`, `title`, `path`), `count` |
+| `get_article` / `get_article_by_title` | `projectId`, `projectName`, `nodeId`, `nodeTitle`, `path`, `content`, `comment` |
+| `save_article` / `save_article_by_title` | `projectId`, `nodeId`, `nodeTitle`, `previousLength`, `savedLength` |
+| `import_markdown_as_project` | `projectId`, `projectName`, `nodeCount` |
+| `search_fulltext` | `keyword`, `results[]`, `byProject[]`, `totalMatches`, `shownCount`, `hint` |
+
+See each tool's `outputSchema` in `tools/list` for the exact definition.
 
 ---
 
