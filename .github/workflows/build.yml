@@ -20,9 +20,9 @@ jobs:
         rid: [osx-arm64, osx-x64]
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
-      - uses: actions/setup-dotnet@v4
+      - uses: actions/setup-dotnet@v6
         with:
           dotnet-version: "8.0.x"
 
@@ -58,7 +58,7 @@ jobs:
           chmod +x ManidocMCP
           tar -czf "../ManidocMCP-${{ matrix.rid }}.tar.gz" ManidocMCP appsettings.json
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: ManidocMCP-${{ matrix.rid }}
           path: dist/ManidocMCP-${{ matrix.rid }}.tar.gz
@@ -72,7 +72,7 @@ jobs:
       contents: write
 
     steps:
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v8
         with:
           path: dist
           merge-multiple: true
