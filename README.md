@@ -1,8 +1,12 @@
-# Manidoc MCP Server (macOS)
+# Manidoc MCP Server
 
-ドキュメント管理アプリ [Manidoc](https://github.com/ichiroabe/manidoc) のデータを、Claude Desktop などの AI エージェントから読み書きするための MCP (Model Context Protocol) サーバーの macOS 版です。
+ドキュメント管理アプリ [Manidoc](https://github.com/ichiroabe/manidoc) のデータを、Claude Desktop などの AI エージェントから読み書きするための MCP (Model Context Protocol) サーバーです。macOS と Windows で動作します。
 
-**English:** The macOS build of the MCP server that lets AI agents (e.g. Claude Desktop) read and write data of the Manidoc document-management app — browse/edit projects and articles, bulk-import Markdown, and full-text search. Full English manual: [UserManual.md](UserManual.md).
+**English:** An MCP server that lets AI agents (e.g. Claude Desktop) read and write data of the Manidoc document-management app — browse/edit projects and articles, bulk-import Markdown, and full-text search. Runs on macOS and Windows. Full English manual: [UserManual.md](UserManual.md).
+
+> セットアップ手順とインストーラは現状 macOS 向けに書かれています。Windows で使う場合は
+> [リリース成果物](#リリース成果物)の zip を展開し、`ManidocMCP.exe` のパスを
+> `%APPDATA%\Claude\claude_desktop_config.json` に登録してください。
 
 ## できること
 
@@ -64,8 +68,8 @@ brew install dotnet@8
 ### 1. クローンとインストール
 
 ```bash
-git clone https://github.com/ichiroabe/manidocMCP_MAC
-cd manidocMCP_MAC
+git clone https://github.com/ichiroabe/manidocMCP
+cd manidocMCP
 bash installer/install.sh
 ```
 
@@ -116,7 +120,7 @@ bash installer/install.sh
 ## 関連リンク
 
 - **Manidoc 本体（Windows アプリ）**: [GitHub](https://github.com/ichiroabe/manidoc) / [Microsoft Store](https://apps.microsoft.com/detail/9n578k2wqxqn)
-- **Windows 版 MCP サーバー**: [manidocMCP_CS](https://github.com/ichiroabe/manidocMCP_CS)
+- **動画生成対応版 MCP サーバー（Windows 専用）**: [manidocMCP_CS](https://github.com/ichiroabe/manidocMCP_CS)
 
 ## サポート
 

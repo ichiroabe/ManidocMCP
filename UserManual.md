@@ -1,4 +1,4 @@
-# Manidoc MCP Server (macOS) — ユーザーマニュアル / User Manual
+# Manidoc MCP Server — ユーザーマニュアル / User Manual
 
 ---
 
@@ -13,7 +13,11 @@
 
 ### 概要
 
-Manidoc MCP Server (macOS版) は、ドキュメント管理アプリ [Manidoc](https://github.com/ichiroabe/manidoc) のデータをAIエージェントから読み書きするための MCP（Model Context Protocol）サーバーです。
+Manidoc MCP Server は、ドキュメント管理アプリ [Manidoc](https://github.com/ichiroabe/manidoc) のデータをAIエージェントから読み書きするための MCP（Model Context Protocol）サーバーです。macOS と Windows で動作します。
+
+> このマニュアルのセットアップ手順は macOS 向けに書かれています。Windows 版のバイナリは
+> Release の `ManidocMCP-win-x64.zip` / `ManidocMCP-win-arm64.zip` から入手でき、
+> 設定ファイルは `%APPDATA%\Claude\claude_desktop_config.json` になります。
 
 Claude Desktop などのMCP対応AIクライアントと連携することで、以下のことが自然言語で行えます。
 
@@ -65,7 +69,7 @@ brew install dotnet@8
 #### 1. ビルドとインストール
 
 ```bash
-cd /Volumes/SDD/AIProject/manidocMCP_MAC
+cd /path/to/manidocMCP
 bash installer/install.sh
 ```
 
@@ -268,7 +272,11 @@ Manidocで「伊達政宗」というキーワードを全文検索して
 
 ### Overview
 
-Manidoc MCP Server (macOS edition) is an MCP (Model Context Protocol) server that allows AI agents to read and write data in [Manidoc](https://github.com/ichiroabe/manidoc), a document management application.
+Manidoc MCP Server is an MCP (Model Context Protocol) server that allows AI agents to read and write data in [Manidoc](https://github.com/ichiroabe/manidoc), a document management application. It runs on macOS and Windows.
+
+> The setup steps in this manual target macOS. Windows binaries are published as
+> `ManidocMCP-win-x64.zip` / `ManidocMCP-win-arm64.zip` on the Releases page, and the
+> config file lives at `%APPDATA%\Claude\claude_desktop_config.json`.
 
 By integrating with MCP-compatible AI clients such as Claude Desktop, you can use natural language to:
 
@@ -320,7 +328,7 @@ brew install dotnet@8
 #### 1. Build and Install
 
 ```bash
-cd /path/to/manidocMCP_MAC
+cd /path/to/manidocMCP
 bash installer/install.sh
 ```
 

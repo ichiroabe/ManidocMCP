@@ -21,7 +21,7 @@ builder.Services
             Title = "Manidoc MCP Server",
             Version = BuildInfo.Version,
             Description = "Read and write Manidoc projects, articles and comments from an MCP client.",
-            WebsiteUrl = "https://github.com/ichiroabe/manidocMCP_MAC",
+            WebsiteUrl = "https://github.com/ichiroabe/manidocMCP",
         };
 
         options.ServerInstructions =
