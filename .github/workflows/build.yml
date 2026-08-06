@@ -1,0 +1,88 @@
+name: build
+
+on:
+  push:
+    branches: [main]
+    tags: ["v*"]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: macos-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        rid: [osx-arm64, osx-x64]
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "8.0.x"
+
+      - name: Restore
+        run: dotnet restore
+
+      - name: Build
+        run: dotnet build -c Release --no-restore
+
+      # タグから付けたバージョンを serverInfo.version と get_server_status に反映させる。
+      # タグが無いビルドでは csproj の <Version> をそのまま使う。
+      - name: Resolve version
+        id: version
+        run: |
+          if [[ "${GITHUB_REF}" == refs/tags/v* ]]; then
+            echo "value=${GITHUB_REF#refs/tags/v}" >> "$GITHUB_OUTPUT"
+          else
+            echo "value=" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Publish (self-contained, single file)
+        run: |
+          ARGS=(-c Release -r ${{ matrix.rid }} --self-contained true
+                -o "dist/${{ matrix.rid }}" -p:PublishSingleFile=true)
+          if [[ -n "${{ steps.version.outputs.value }}" ]]; then
+            ARGS+=(-p:Version=${{ steps.version.outputs.value }})
+          fi
+          dotnet publish "${ARGS[@]}"
+
+      - name: Package
+        run: |
+          cd "dist/${{ matrix.rid }}"
+          chmod +x ManidocMCP
+          tar -czf "../ManidocMCP-${{ matrix.rid }}.tar.gz" ManidocMCP appsettings.json
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ManidocMCP-${{ matrix.rid }}
+          path: dist/ManidocMCP-${{ matrix.rid }}.tar.gz
+          if-no-files-found: error
+
+  release:
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: dist
+          merge-multiple: true
+
+      - name: Create release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "${GITHUB_REF#refs/tags/}" \
+            --repo "${GITHUB_REPOSITORY}" \
+            --title "${GITHUB_REF#refs/tags/}" \
+            --generate-notes \
+            dist/*.tar.gz
