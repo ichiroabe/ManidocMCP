@@ -68,6 +68,20 @@ jobs:
           chmod +x ManidocMCP
           tar -czf "../ManidocMCP-${{ matrix.rid }}.tar.gz" ManidocMCP appsettings.json
 
+      # install.ps1 は Windows でしか実行されないため、せめて構文だけは CI で検証する。
+      - name: Lint installer (PowerShell)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $errors = $null
+          [System.Management.Automation.Language.Parser]::ParseFile(
+            (Resolve-Path "installer/install.ps1"), [ref]$null, [ref]$errors) | Out-Null
+          if ($errors) {
+            $errors | ForEach-Object { Write-Host "::error::$_" }
+            exit 1
+          }
+          Write-Host "installer/install.ps1: syntax OK"
+
       - name: Package (zip)
         if: runner.os == 'Windows'
         shell: pwsh

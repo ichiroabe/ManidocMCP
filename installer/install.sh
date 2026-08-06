@@ -22,10 +22,18 @@ fi
 DOTNET_VERSION=$(dotnet --version)
 echo ".NET SDK バージョン: $DOTNET_VERSION"
 
+# CPU アーキテクチャの判定（Apple Silicon / Intel）
+if [ "$(uname -m)" = "arm64" ]; then
+    RID="osx-arm64"
+else
+    RID="osx-x64"
+fi
+echo "ターゲット: $RID"
+
 # ビルド
 echo ""
 echo "プロジェクトをビルドしています..."
-dotnet publish "$PROJECT_DIR" -c Release -r osx-arm64 --self-contained true -o "$INSTALL_DIR" /p:PublishSingleFile=true
+dotnet publish "$PROJECT_DIR" -c Release -r "$RID" --self-contained true -o "$INSTALL_DIR" /p:PublishSingleFile=true
 
 # appsettings.json コピー
 if [ -f "$PROJECT_DIR/appsettings.json" ]; then

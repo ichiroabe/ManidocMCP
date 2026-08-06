@@ -4,9 +4,8 @@
 
 **English:** An MCP server that lets AI agents (e.g. Claude Desktop) read and write data of the Manidoc document-management app — browse/edit projects and articles, bulk-import Markdown, and full-text search. Runs on macOS and Windows. Full English manual: [UserManual.md](UserManual.md).
 
-> セットアップ手順とインストーラは現状 macOS 向けに書かれています。Windows で使う場合は
-> [リリース成果物](#リリース成果物)の zip を展開し、`ManidocMCP.exe` のパスを
-> `%APPDATA%\Claude\claude_desktop_config.json` に登録してください。
+> 下記のセットアップ手順は macOS 向けです。Windows の手順は
+> [UserManual.md の「Windows でのセットアップ」](UserManual.md#windows-でのセットアップ) を参照してください。
 
 ## できること
 
@@ -63,7 +62,9 @@ Windows でも動きます。ソースからビルドしたい場合は下記の
 brew install dotnet@8
 ```
 
-## セットアップ
+## セットアップ（macOS）
+
+Windows は [UserManual.md の「Windows でのセットアップ」](UserManual.md#windows-でのセットアップ) を参照してください。
 
 ### 1. クローンとインストール
 
@@ -72,6 +73,8 @@ git clone https://github.com/ichiroabe/manidocMCP
 cd manidocMCP
 bash installer/install.sh
 ```
+
+`install.sh` は CPU（Apple Silicon / Intel）を自動判定して `~/Applications/ManidocMCP` にインストールします。
 
 ### 2. Claude Desktop との接続
 

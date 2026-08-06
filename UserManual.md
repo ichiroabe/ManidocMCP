@@ -15,9 +15,7 @@
 
 Manidoc MCP Server は、ドキュメント管理アプリ [Manidoc](https://github.com/ichiroabe/manidoc) のデータをAIエージェントから読み書きするための MCP（Model Context Protocol）サーバーです。macOS と Windows で動作します。
 
-> このマニュアルのセットアップ手順は macOS 向けに書かれています。Windows 版のバイナリは
-> Release の `ManidocMCP-win-x64.zip` / `ManidocMCP-win-arm64.zip` から入手でき、
-> 設定ファイルは `%APPDATA%\Claude\claude_desktop_config.json` になります。
+> Windows をお使いの場合は [Windows でのセットアップ](#windows-でのセットアップ) を参照してください。
 
 Claude Desktop などのMCP対応AIクライアントと連携することで、以下のことが自然言語で行えます。
 
@@ -51,8 +49,8 @@ MCP 仕様 **2026-07-28** に対応しています（実装は C# SDK `ModelCont
 
 | 項目 | 内容 |
 | --- | --- |
-| OS | macOS 13 (Ventura) 以降 |
-| ランタイム | .NET 8.0 SDK 以上 |
+| OS | macOS 13 (Ventura) 以降、または Windows 10 / 11 |
+| ランタイム | .NET 8.0 SDK 以上（**ソースからビルドする場合のみ**。配布バイナリはランタイム同梱） |
 | Manidoc | インストール済みであること |
 | AIクライアント | Claude Desktop など MCP 対応のもの |
 
@@ -62,9 +60,15 @@ MCP 仕様 **2026-07-28** に対応しています（実装は C# SDK `ModelCont
 brew install dotnet@8
 ```
 
+Windows の場合:
+
+```powershell
+winget install Microsoft.DotNet.SDK.8
+```
+
 ---
 
-### インストール手順
+### インストール手順（macOS）
 
 #### 1. ビルドとインストール
 
@@ -122,6 +126,76 @@ Manidocサーバーのステータスを確認して
 ```
 
 正常であればワークスペースのパスとプロジェクト数が返ります。
+
+---
+
+### Windows でのセットアップ
+
+2通りあります。**ビルド済みバイナリを使う方法A を推奨します**（.NET SDK が不要です）。
+
+#### 方法A: ビルド済みバイナリを使う（推奨）
+
+1. [Releases](https://github.com/ichiroabe/manidocMCP/releases) から CPU に合う zip をダウンロードします。
+
+   | CPU | ファイル |
+   | --- | --- |
+   | Intel / AMD（一般的な PC） | `ManidocMCP-win-x64.zip` |
+   | Arm64（Snapdragon X 搭載機など） | `ManidocMCP-win-arm64.zip` |
+
+2. 任意のフォルダに展開します（例: `%LOCALAPPDATA%\Programs\ManidocMCP`）。
+3. 展開した `ManidocMCP.exe` のフルパスを控えます。
+
+#### 方法B: ソースからビルドする
+
+.NET 8.0 SDK が必要です。
+
+```powershell
+winget install Microsoft.DotNet.SDK.8
+git clone https://github.com/ichiroabe/manidocMCP
+cd manidocMCP
+powershell -ExecutionPolicy Bypass -File installer\install.ps1
+```
+
+`install.ps1` は CPU アーキテクチャ（x64 / Arm64）を自動判定して
+`%LOCALAPPDATA%\Programs\ManidocMCP` にインストールし、そのまま貼り付けられる設定 JSON を表示します。
+
+> `-ExecutionPolicy Bypass` は、既定の実行ポリシーでスクリプトがブロックされるのを回避するためです。
+> この指定はそのプロセス内だけに効き、システムの設定は変更しません。
+
+#### Claude Desktop の設定（Windows）
+
+設定ファイルの場所:
+
+```
+%APPDATA%\Claude\claude_desktop_config.json
+```
+
+設定例。**Windows のパスはバックスラッシュを2つ重ねて書く**必要があります（JSON のエスケープ）:
+
+```json
+{
+  "mcpServers": {
+    "manidoc": {
+      "command": "C:\\Users\\yourname\\AppData\\Local\\Programs\\ManidocMCP\\ManidocMCP.exe",
+      "env": {
+        "MANIDOC_WORKSPACE": "C:\\Users\\yourname\\ManidocData"
+      }
+    }
+  }
+}
+```
+
+保存後、Claude Desktop を再起動すると有効になります。接続確認は macOS と同じく
+「Manidocサーバーのステータスを確認して」で行えます。
+
+#### トラブルシューティング（Windows）
+
+| 症状 | 対処 |
+| --- | --- |
+| スクリプトが実行できない | `powershell -ExecutionPolicy Bypass -File installer\install.ps1` の形で実行する |
+| 設定を書いてもサーバーが出てこない | JSON のバックスラッシュが 1 つになっていないか確認する（`\\` が必要） |
+| 起動直後に落ちる | `MANIDOC_WORKSPACE` のフォルダが存在するか確認する |
+| 詳細を見たい | Claude Desktop のログフォルダ `%APPDATA%\Claude\logs` の `mcp-server-manidoc.log` を確認する |
 
 ---
 
@@ -274,9 +348,7 @@ Manidocで「伊達政宗」というキーワードを全文検索して
 
 Manidoc MCP Server is an MCP (Model Context Protocol) server that allows AI agents to read and write data in [Manidoc](https://github.com/ichiroabe/manidoc), a document management application. It runs on macOS and Windows.
 
-> The setup steps in this manual target macOS. Windows binaries are published as
-> `ManidocMCP-win-x64.zip` / `ManidocMCP-win-arm64.zip` on the Releases page, and the
-> config file lives at `%APPDATA%\Claude\claude_desktop_config.json`.
+> On Windows, see [Setup on Windows](#setup-on-windows).
 
 By integrating with MCP-compatible AI clients such as Claude Desktop, you can use natural language to:
 
@@ -310,8 +382,8 @@ This server implements MCP specification **2026-07-28** (via the C# SDK `ModelCo
 
 | Item | Details |
 | --- | --- |
-| OS | macOS 13 (Ventura) or later |
-| Runtime | .NET 8.0 SDK or later |
+| OS | macOS 13 (Ventura) or later, or Windows 10 / 11 |
+| Runtime | .NET 8.0 SDK or later (**only when building from source** — released binaries bundle the runtime) |
 | Manidoc | Must be installed |
 | AI Client | Claude Desktop or any MCP-compatible client |
 
@@ -321,9 +393,15 @@ This server implements MCP specification **2026-07-28** (via the C# SDK `ModelCo
 brew install dotnet@8
 ```
 
+On Windows:
+
+```powershell
+winget install Microsoft.DotNet.SDK.8
+```
+
 ---
 
-### Installation
+### Installation (macOS)
 
 #### 1. Build and Install
 
@@ -362,6 +440,75 @@ Example:
 ```text
 Check the Manidoc server status.
 ```
+
+---
+
+### Setup on Windows
+
+Two options. **Option A (prebuilt binary) is recommended** — it needs no .NET SDK.
+
+#### Option A: Use a prebuilt binary (recommended)
+
+1. Download the zip matching your CPU from [Releases](https://github.com/ichiroabe/manidocMCP/releases).
+
+   | CPU | File |
+   | --- | --- |
+   | Intel / AMD (most PCs) | `ManidocMCP-win-x64.zip` |
+   | Arm64 (e.g. Snapdragon X devices) | `ManidocMCP-win-arm64.zip` |
+
+2. Extract it anywhere (e.g. `%LOCALAPPDATA%\Programs\ManidocMCP`).
+3. Note the full path to `ManidocMCP.exe`.
+
+#### Option B: Build from source
+
+Requires the .NET 8.0 SDK.
+
+```powershell
+winget install Microsoft.DotNet.SDK.8
+git clone https://github.com/ichiroabe/manidocMCP
+cd manidocMCP
+powershell -ExecutionPolicy Bypass -File installer\install.ps1
+```
+
+`install.ps1` detects your CPU architecture (x64 / Arm64), installs into
+`%LOCALAPPDATA%\Programs\ManidocMCP`, and prints a ready-to-paste config snippet.
+
+> `-ExecutionPolicy Bypass` only avoids the default policy blocking the script for that one
+> process; it does not change any system setting.
+
+#### Configure Claude Desktop (Windows)
+
+Location:
+
+```
+%APPDATA%\Claude\claude_desktop_config.json
+```
+
+Example — note that **Windows paths need doubled backslashes** (JSON escaping):
+
+```json
+{
+  "mcpServers": {
+    "manidoc": {
+      "command": "C:\\Users\\yourname\\AppData\\Local\\Programs\\ManidocMCP\\ManidocMCP.exe",
+      "env": {
+        "MANIDOC_WORKSPACE": "C:\\Users\\yourname\\ManidocData"
+      }
+    }
+  }
+}
+```
+
+Restart Claude Desktop to apply.
+
+#### Troubleshooting (Windows)
+
+| Symptom | Fix |
+| --- | --- |
+| The script will not run | Invoke it as `powershell -ExecutionPolicy Bypass -File installer\install.ps1` |
+| Server does not appear after editing the config | Check that backslashes are doubled (`\\`) in the JSON |
+| Exits immediately on start | Check that the `MANIDOC_WORKSPACE` folder exists |
+| Need more detail | Read `mcp-server-manidoc.log` in the Claude Desktop log folder `%APPDATA%\Claude\logs` |
 
 ---
 
