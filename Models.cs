@@ -1,4 +1,5 @@
 using Newtonsoft.Json;
+using Newtonsoft.Json.Linq;
 
 namespace ManidocMCP;
 
@@ -24,6 +25,11 @@ public class ManidocNode
 
     [JsonProperty("children")]
     public List<ManidocNode> Children { get; set; } = [];
+
+    // Manidoc アプリが持つが本サーバーが明示的に扱わないノード属性（articleSpeaker /
+    // titleSpeaker など）を、保存(save_article)時に失わないよう未知フィールドを往復させる。
+    [JsonExtensionData]
+    private IDictionary<string, JToken>? Extra { get; set; }
 }
 
 public class ManidocProject
@@ -51,6 +57,11 @@ public class ManidocProject
 
     [JsonProperty("rootNodes")]
     public List<ManidocNode> RootNodes { get; set; } = [];
+
+    // lastSelectedNodeId / themeCssFileName など、本サーバーが明示的に扱わない
+    // プロジェクト属性を、保存(save_article)時に失わないよう未知フィールドを往復させる。
+    [JsonExtensionData]
+    private IDictionary<string, JToken>? Extra { get; set; }
 }
 
 public record FlatNode(string Id, string Title, string Path);
