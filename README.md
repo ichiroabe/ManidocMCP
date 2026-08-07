@@ -41,9 +41,11 @@ self-contained（.NET ランタイム同梱）の単一実行ファイルなの�
 | `ManidocMCP-osx-x64.tar.gz` | macOS / Intel |
 | `ManidocMCP-win-x64.zip` | Windows / x64 |
 | `ManidocMCP-win-arm64.zip` | Windows / Arm64 |
+| `ManidocMCP-linux-x64.tar.gz` | Linux / x64 |
+| `ManidocMCP-linux-arm64.tar.gz` | Linux / Arm64 |
 
 本体は `net8.0` でプラットフォーム依存のコードを持たないため、同じソースが macOS でも
-Windows でも動きます。ソースからビルドしたい場合は下記の手順に従ってください。
+Windows でも Linux でも動きます。ソースからビルドしたい場合は下記の手順に従ってください。
 
 > Windows で動画生成機能まで使いたい場合は [manidocMCP_CS](https://github.com/ichiroabe/manidocMCP_CS) を使ってください。
 
@@ -51,8 +53,8 @@ Windows でも動きます。ソースからビルドしたい場合は下記の
 
 | 項目 | 内容 |
 | --- | --- |
-| OS | macOS 13 (Ventura) 以降 |
-| ランタイム | .NET 8.0 SDK 以上 |
+| OS | macOS 13 (Ventura) 以降 / Windows 10・11 / Linux (glibc) |
+| ランタイム | .NET 8.0 SDK 以上（**ソースからビルドする場合のみ**。配布バイナリはランタイム同梱） |
 | Manidoc | インストール済みであること |
 | AIクライアント | Claude Desktop など MCP 対応クライアント |
 

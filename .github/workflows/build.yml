@@ -13,8 +13,9 @@ permissions:
 
 jobs:
   build:
-    # macOS 版は macOS ランナー、Windows 版は Windows ランナーでネイティブにビルドする。
-    # 配布形式も各 OS の慣習に合わせる（macOS: tar.gz / Windows: zip）。
+    # macOS/Linux 版はそれぞれ macOS/Ubuntu ランナー、Windows 版は Windows ランナーで
+    # ネイティブにビルドする（arm64 は各 OS で x64 ランナーからクロス publish）。
+    # 配布形式は各 OS の慣習に合わせる（macOS/Linux: tar.gz / Windows: zip）。
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
@@ -24,6 +25,8 @@ jobs:
           - { rid: osx-x64, os: macos-latest }
           - { rid: win-x64, os: windows-latest }
           - { rid: win-arm64, os: windows-latest }
+          - { rid: linux-x64, os: ubuntu-latest }
+          - { rid: linux-arm64, os: ubuntu-latest }
 
     steps:
       - uses: actions/checkout@v7
@@ -61,7 +64,7 @@ jobs:
             -o "dist/${{ matrix.rid }}" -p:PublishSingleFile=true $VERSION_ARG
 
       - name: Package (tar.gz)
-        if: runner.os == 'macOS'
+        if: runner.os != 'Windows'
         shell: bash
         run: |
           cd "dist/${{ matrix.rid }}"
