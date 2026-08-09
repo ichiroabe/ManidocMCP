@@ -32,7 +32,9 @@ AIエージェントの「永続的な知識置き場・成果物置き場」と
 
 ## リリース成果物
 
-`v*` タグを push すると GitHub Actions が以下をビルドして Release に添付します。いずれも
+`ManidocMCP.csproj` の `<Version>` を上げて main に push すると、GitHub Actions が対応する
+`v*` タグを自動で作成し、以下をビルドして Release に添付します（手でタグを打つ必要はありません。
+`<Version>` を据え置いたまま push した場合はリリース済みと判定されスキップします）。いずれも
 self-contained（.NET ランタイム同梱）の単一実行ファイルなので、**.NET SDK なしで動きます**。
 
 | ファイル | 対象 |
