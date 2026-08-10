@@ -148,6 +148,37 @@ public sealed class SaveArticleResult
     public required int SavedLength { get; init; }
 }
 
+public sealed class AddNodeResult
+{
+    [JsonPropertyName("projectId")]
+    [Description("ID of the project the node was added to.")]
+    public required string ProjectId { get; init; }
+
+    [JsonPropertyName("projectName")]
+    [Description("Name of the project the node was added to.")]
+    public required string ProjectName { get; init; }
+
+    [JsonPropertyName("nodeId")]
+    [Description("ID of the newly created node.")]
+    public required string NodeId { get; init; }
+
+    [JsonPropertyName("nodeTitle")]
+    [Description("Title of the newly created node.")]
+    public required string NodeTitle { get; init; }
+
+    [JsonPropertyName("path")]
+    [Description("Hierarchical path of the new node, joined with \" > \".")]
+    public required string Path { get; init; }
+
+    [JsonPropertyName("parentNodePath")]
+    [Description("Path of the parent node; null when the node was added at the top level.")]
+    public string? ParentNodeTitle { get; init; }
+
+    [JsonPropertyName("savedLength")]
+    [Description("Character count of the article that was saved.")]
+    public required int SavedLength { get; init; }
+}
+
 public sealed class ImportProjectResult
 {
     [JsonPropertyName("projectId")]
