@@ -72,7 +72,7 @@ public class ManidocTools
         Idempotent = true,
         OpenWorld = false,
         UseStructuredContent = true)]
-    [Description("Returns a list of nodes (titles) in the specified project. Each entry includes id, title, and hierarchical path.")]
+    [Description("Returns every node of the specified project, flattened depth first, with id, title and hierarchical path, plus a count field. Use this to enumerate or count the nodes of a project — search_fulltext only returns keyword matches and cannot tell you how many nodes a project has.")]
     public ListNodesResult ListNodes(
         [Description("Project ID")] string project_id)
     {
@@ -130,7 +130,7 @@ public class ManidocTools
         Idempotent = true,
         OpenWorld = false,
         UseStructuredContent = true)]
-    [Description("Overwrites the article of the specified node with Markdown content. Existing content will be replaced — call get_article first if you intend to append.")]
+    [Description("Replaces the whole article of the specified node. Anything not included in content is lost — use append_article instead when you only want to add to the node.")]
     public SaveArticleResult SaveArticle(
         [Description("Project ID")] string project_id,
         [Description("Node ID")] string node_id,
@@ -148,7 +148,7 @@ public class ManidocTools
         Idempotent = true,
         OpenWorld = false,
         UseStructuredContent = true)]
-    [Description("Saves an article in Markdown by project name and node title. Both support partial matching. Existing content will be replaced.")]
+    [Description("Replaces the whole article of a node found by project name and node title (both partial match). Anything not included in content is lost — use append_article instead when you only want to add to the node.")]
     public SaveArticleResult SaveArticleByTitle(
         [Description("Project name (partial match)")] string project_name,
         [Description("Node title (partial match)")] string node_title,
@@ -156,6 +156,102 @@ public class ManidocTools
     {
         var (project, node, _) = ResolveByTitle(project_name, node_title);
         return Save(project, node, content);
+    }
+
+    [McpServerTool(
+        Name = "append_article",
+        Title = "記事への追記",
+        ReadOnly = false,
+        Destructive = false,
+        Idempotent = false,
+        OpenWorld = false,
+        UseStructuredContent = true)]
+    [Description("Appends text to the end of a node's article, keeping everything that is already there. Prefer this over save_article whenever you want to add to a node: save_article replaces the whole body, so anything you did not reproduce exactly is lost.")]
+    public SaveArticleResult AppendArticle(
+        [Description("Project name (partial match)")] string project_name,
+        [Description("Node title (partial match)")] string node_title,
+        [Description("Markdown text to append at the end")] string content)
+    {
+        if (string.IsNullOrWhiteSpace(content))
+            throw new McpException("content is empty.");
+
+        var (project, node, _) = ResolveByTitle(project_name, node_title);
+        var existing = node.Article ?? "";
+        var separator = existing.Length == 0 || existing.EndsWith('\n') ? "" : "\n";
+
+        return Save(project, node, $"{existing}{separator}{content}");
+    }
+
+    [McpServerTool(
+        Name = "add_node",
+        Title = "ノードの追加",
+        ReadOnly = false,
+        Destructive = false,
+        Idempotent = false,
+        OpenWorld = false,
+        UseStructuredContent = true)]
+    [Description("Adds a new node to an existing project. Use this to add a page to a project you already have — import_markdown_as_project always creates a whole new project instead. Give parent_title to nest it under an existing node; omit it to add at the top level. Existing nodes are never modified.")]
+    public AddNodeResult AddNode(
+        [Description("Project name (partial match)")] string project_name,
+        [Description("Title of the new node")] string title,
+        [Description("Article body in Markdown (optional)")] string? content = null,
+        [Description("Supplementary note (optional)")] string? comment = null,
+        [Description("Title of an existing node to add this under (partial match). Omit to add at the top level.")] string? parent_title = null)
+    {
+        if (string.IsNullOrWhiteSpace(title))
+            throw new McpException("title is empty.");
+
+        var projects = MatchProjects(project_name);
+        if (projects.Count > 1)
+            throw new McpException(
+                $"Ambiguous: \"{project_name}\" matches {projects.Count} projects: " +
+                $"{NameList(projects.Select(p => p.Name))}. Use the full project name.");
+
+        var project = projects[0];
+
+        // 親を決める。指定が無ければトップレベル。
+        List<ManidocNode> siblings;
+        string parentPath;
+        if (string.IsNullOrWhiteSpace(parent_title))
+        {
+            siblings = project.RootNodes ??= [];
+            parentPath = "";
+        }
+        else
+        {
+            // 同じ project インスタンス上で親を探す(読み直すと保存が空振りする)
+            var (_, parent, path) = ResolveIn([project], parent_title);
+            siblings = parent.Children ??= [];
+            parentPath = path;
+        }
+
+        // 同じ親に同名がある場合は作らない。小型 LLM が再試行で重複を量産するのを防ぐ。
+        var duplicate = siblings.FirstOrDefault(n => n.Title.Equals(title, Ci));
+        if (duplicate != null)
+            throw new McpException(
+                $"A node titled \"{title}\" already exists here (node_id={duplicate.Id}). " +
+                $"Call save_article to overwrite it, or choose a different title.");
+
+        var node = new ManidocNode
+        {
+            Id = Guid.NewGuid().ToString(),
+            Title = title,
+            Article = content ?? "",
+            Comment = comment ?? "",
+        };
+        siblings.Add(node);
+        WorkspaceService.SaveProject(project);
+
+        return new AddNodeResult
+        {
+            ProjectId = project.Id,
+            ProjectName = project.Name,
+            NodeId = node.Id,
+            NodeTitle = node.Title,
+            Path = string.IsNullOrEmpty(parentPath) ? node.Title : $"{parentPath} > {node.Title}",
+            ParentNodeTitle = string.IsNullOrWhiteSpace(parent_title) ? null : parentPath,
+            SavedLength = node.Article.Length,
+        };
     }
 
     [McpServerTool(
@@ -192,7 +288,7 @@ public class ManidocTools
         Idempotent = true,
         OpenWorld = false,
         UseStructuredContent = true)]
-    [Description("Searches all projects (or a specific project) for a keyword. Searches project names, node titles, article body, and comments.")]
+    [Description("Searches all projects (or a specific project) for a keyword, across project names, node titles, article bodies and comments. The keyword is matched as a literal substring, so a natural-language phrase usually finds nothing; prefer one distinctive word. If you do pass several words separated by spaces and the literal match finds nothing, the server retries for nodes containing every word. Zero results means the keyword is absent — try a different word or browse with list_projects and list_nodes instead of giving up.")]
     public SearchResultSet SearchFulltext(
         [Description("Search keyword (case-insensitive)")] string keyword,
         [Description("Limit search to a specific project ID (optional)")] string? project_id = null,
@@ -203,7 +299,8 @@ public class ManidocTools
         if (max_results <= 0)
             throw new McpException("max_results must be greater than 0");
 
-        var (shown, summary, totalMatches) = SearchService.Search(keyword, project_id, max_results);
+        var (shown, summary, totalMatches, usedAndFallback) =
+            SearchService.Search(keyword, project_id, max_results);
 
         return new SearchResultSet
         {
@@ -228,13 +325,38 @@ public class ManidocTools
             })],
             TotalMatches = totalMatches,
             ShownCount = shown.Count,
-            Hint = shown.Count < totalMatches
-                ? $"{totalMatches - shown.Count} 件を省略しました。project_id を指定して絞り込むか、max_results を増やしてください。"
-                : null,
+            Hint = BuildSearchHint(keyword, shown.Count, totalMatches, usedAndFallback),
         };
     }
 
     // --- ヘルパー ---
+
+    /// <summary>
+    /// 0 件のときこそヒントが要る。小型モデルは 0 件を「情報が存在しない」と受け取って
+    /// 探索をやめ、そのまま作り話を始めるため、次に打つ手を明示する。
+    /// </summary>
+    private static string? BuildSearchHint(string keyword, int shownCount, int totalMatches, bool usedAndFallback)
+    {
+        if (totalMatches == 0)
+        {
+            var multiWord = keyword.Split([' ', '　', '\t'], StringSplitOptions.RemoveEmptyEntries).Length > 1;
+            return multiWord
+                ? $"\"{keyword}\" は 0 件でした。この検索は文字列そのままの一致です。" +
+                  "語を 1 つに減らすか、list_projects → list_nodes で辿ってください。"
+                : $"\"{keyword}\" は 0 件でした。別の語を試すか、list_projects → list_nodes で辿ってください。" +
+                  "ワークスペースに無い内容を推測で答えないでください。";
+        }
+
+        var parts = new List<string>();
+        if (usedAndFallback)
+            parts.Add("文字列そのままでは 0 件だったため、語ごとに分けて一致数の多い順に返しました。" +
+                      "area の terms:N/M は M 語中 N 語が一致した意味です。上位でも的外れなことがあるので、" +
+                      "get_article で本文を確かめてから答えてください。");
+        if (shownCount < totalMatches)
+            parts.Add($"{totalMatches - shownCount} 件を省略しました。project_id を指定して絞り込むか、max_results を増やしてください。");
+
+        return parts.Count > 0 ? string.Join(" ", parts) : null;
+    }
 
     private static ManidocProject RequireProject(string projectId)
         => WorkspaceService.GetProject(projectId)
@@ -249,20 +371,96 @@ public class ManidocTools
         return (project, node, path);
     }
 
-    private static (ManidocProject Project, ManidocNode Node, string Path) ResolveByTitle(string projectName, string nodeTitle)
+    private const StringComparison Ci = StringComparison.OrdinalIgnoreCase;
+
+    /// <summary>
+    /// 名前にマッチするプロジェクトを「すべて」返す。完全一致があればそれを優先する。
+    /// 空文字/未指定はワークスペース全体を対象にする。
+    /// 1 件に絞らないのは、部分一致で最初に当たったプロジェクトだけを見ると
+    /// 「マニュアル」が別のプロジェクトに吸われて、実在するノードを not found と
+    /// 誤報するため（例: "マニュアル"+"はじめに"）。
+    /// </summary>
+    private static List<ManidocProject> MatchProjects(string? projectName)
     {
-        var project = WorkspaceService.GetAllProjects()
-            .FirstOrDefault(p => p.Name.Contains(projectName, StringComparison.OrdinalIgnoreCase))
-            ?? throw new McpException($"Project \"{projectName}\" not found. Call list_projects to see available names.");
+        var all = WorkspaceService.GetAllProjects();
+        if (string.IsNullOrWhiteSpace(projectName)) return all;
 
-        var matched = WorkspaceService.FlattenNodes(project.RootNodes ?? [])
-            .FirstOrDefault(n => n.Title.Contains(nodeTitle, StringComparison.OrdinalIgnoreCase))
-            ?? throw new McpException($"Node \"{nodeTitle}\" not found in project \"{project.Name}\". Call list_nodes to see available titles.");
+        var exact = all.Where(p => p.Name.Equals(projectName, Ci)).ToList();
+        if (exact.Count > 0) return exact;
 
-        var node = WorkspaceService.FindNode(project.RootNodes ?? [], matched.Id)
-            ?? throw new McpException($"Node not found: {matched.Id}");
+        var partial = all.Where(p => p.Name.Contains(projectName, Ci)).ToList();
+        if (partial.Count == 0)
+            throw new McpException(
+                $"Project \"{projectName}\" not found. Available projects: {NameList(all.Select(p => p.Name))}");
 
-        return (project, node, matched.Path);
+        return partial;
+    }
+
+    private static string NameList(IEnumerable<string> names, int max = 30)
+    {
+        var list = names.ToList();
+        var head = string.Join(" / ", list.Take(max));
+        return list.Count > max ? $"{head} …(他 {list.Count - max} 件)" : head;
+    }
+
+    /// <summary>
+    /// プロジェクト名＋ノードタイトルの部分一致でノードを一意に決める。
+    /// 候補が複数あるときは黙って先頭を選ばず、ID 付きの候補一覧を添えて失敗させる。
+    /// 書き込み系がここを通るため、取り違えて上書きするより中断する方が安全。
+    /// </summary>
+    private static (ManidocProject Project, ManidocNode Node, string Path) ResolveByTitle(string projectName, string nodeTitle)
+        => ResolveIn(MatchProjects(projectName), nodeTitle);
+
+    /// <summary>
+    /// 渡されたプロジェクト「インスタンス」の中からノードを一意に決める。
+    /// add_node は親ノードと保存対象を同じインスタンス上で扱う必要があるため、
+    /// プロジェクトを読み直さずに解決できるこの形にしてある
+    /// （読み直すと別オブジェクトになり、子を足しても保存されない）。
+    /// </summary>
+    private static (ManidocProject Project, ManidocNode Node, string Path) ResolveIn(
+        List<ManidocProject> projects, string nodeTitle)
+    {
+        if (string.IsNullOrWhiteSpace(nodeTitle))
+            throw new McpException("node_title is empty.");
+
+        var hits = new List<(ManidocProject Project, FlatNode Flat)>();
+        foreach (var p in projects)
+        {
+            foreach (var f in WorkspaceService.FlattenNodes(p.RootNodes ?? []))
+            {
+                if (f.Title.Contains(nodeTitle, Ci)) hits.Add((p, f));
+            }
+        }
+
+        if (hits.Count == 0)
+        {
+            var titles = projects
+                .SelectMany(p => WorkspaceService.FlattenNodes(p.RootNodes ?? []).Select(f => f.Title));
+            throw new McpException(
+                $"Node \"{nodeTitle}\" not found in {NameList(projects.Select(p => p.Name))}. " +
+                $"Available titles: {NameList(titles)}");
+        }
+
+        // 完全一致があれば部分一致より優先する（"はじめに" が "1. はじめに" に負けないように）
+        var exact = hits.Where(h => h.Flat.Title.Equals(nodeTitle, Ci)).ToList();
+        var final = exact.Count > 0 ? exact : hits;
+
+        if (final.Count > 1)
+        {
+            var lines = final.Select((h, i) =>
+                $"[{i + 1}] {h.Project.Name} > {h.Flat.Path} " +
+                $"(project_id={h.Project.Id}, node_id={h.Flat.Id})");
+            throw new McpException(
+                $"Ambiguous: \"{nodeTitle}\" matches {final.Count} nodes. " +
+                $"Pick one and call get_article / save_article with its project_id and node_id.\n" +
+                string.Join("\n", lines));
+        }
+
+        var (project, flat) = final[0];
+        var node = WorkspaceService.FindNode(project.RootNodes ?? [], flat.Id)
+            ?? throw new McpException($"Node not found: {flat.Id}");
+
+        return (project, node, flat.Path);
     }
 
     private static string? PathOf(ManidocProject project, string nodeId)
