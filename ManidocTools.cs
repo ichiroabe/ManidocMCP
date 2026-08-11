@@ -1,4 +1,5 @@
 using System.ComponentModel;
+using System.Text.RegularExpressions;
 using ModelContextProtocol;
 using ModelContextProtocol.Server;
 
@@ -113,10 +114,10 @@ public class ManidocTools
         Idempotent = true,
         OpenWorld = false,
         UseStructuredContent = true)]
-    [Description("Returns the article (Markdown) by project name and node title. Both support partial matching.")]
+    [Description("Returns the article (Markdown) of a node found by its title. Omit project_name to search every project in the workspace — do that whenever the user names a node without saying which project it is in. Both arguments match on substrings. If more than one node matches, the call fails with the list of candidates and their ids; pick one and call get_article.")]
     public ArticleResult GetArticleByTitle(
-        [Description("Project name (partial match)")] string project_name,
-        [Description("Node title (partial match)")] string node_title)
+        [Description("Node title (partial match)")] string node_title,
+        [Description("Project name (partial match). Omit to search every project.")] string? project_name = null)
     {
         var (project, node, path) = ResolveByTitle(project_name, node_title);
         return ToArticleResult(project, node, path);
@@ -166,7 +167,7 @@ public class ManidocTools
         Idempotent = false,
         OpenWorld = false,
         UseStructuredContent = true)]
-    [Description("Appends text to the end of a node's article, keeping everything that is already there. Prefer this over save_article whenever you want to add to a node: save_article replaces the whole body, so anything you did not reproduce exactly is lost.")]
+    [Description("Appends text to the end of a node's article, keeping everything that is already there. Prefer this over save_article whenever you want to add to a node: save_article replaces the whole body, so anything you did not reproduce exactly is lost. To link to another node write [text](#node-title:its title); the server resolves it to the node id.")]
     public SaveArticleResult AppendArticle(
         [Description("Project name (partial match)")] string project_name,
         [Description("Node title (partial match)")] string node_title,
@@ -240,6 +241,9 @@ public class ManidocTools
             Comment = comment ?? "",
         };
         siblings.Add(node);
+        // ツリーに入れてから解決する(自分自身のタイトルも参照できるように)
+        node.Article = ResolveTitleLinks(project, node.Article);
+        node.Comment = ResolveTitleLinks(project, node.Comment);
         WorkspaceService.SaveProject(project);
 
         return new AddNodeResult
@@ -262,7 +266,7 @@ public class ManidocTools
         Idempotent = false,
         OpenWorld = false,
         UseStructuredContent = true)]
-    [Description("Imports Markdown text as a new Manidoc project. H1 becomes the project name, H2+ headings become nodes (hierarchical), blockquotes go to node.comment, paragraphs/code/lists go to node.article.")]
+    [Description("Imports Markdown text as a new Manidoc project. H1 becomes the project name, H2+ headings become nodes (hierarchical), blockquotes go to node.comment, paragraphs/code/lists go to node.article. To link from one node to another, write [text](#node-title:the other heading) — the server replaces it with that node's id after the nodes exist, so a document whose index links to its own sections can be created in this single call. Never write raw node ids yourself.")]
     public ImportProjectResult ImportMarkdownAsProject(
         [Description("Markdown text to import")] string markdown_text)
     {
@@ -271,6 +275,10 @@ public class ManidocTools
 
         var workspace = WorkspaceService.GetWorkspacePath();
         var project = MarkdownImporter.Import(markdown_text, workspace);
+        // 取り込み後はノードIDが決まっているので、この時点でタイトルリンクを解決できる。
+        // これにより「見出しを並べて、本文からその見出しへリンクする」文書を
+        // 1 回の呼び出しで完成させられる。
+        ResolveTitleLinksInTree(project);
         WorkspaceService.SaveNewProject(project);
 
         return new ImportProjectResult
@@ -408,7 +416,13 @@ public class ManidocTools
     /// 候補が複数あるときは黙って先頭を選ばず、ID 付きの候補一覧を添えて失敗させる。
     /// 書き込み系がここを通るため、取り違えて上書きするより中断する方が安全。
     /// </summary>
-    private static (ManidocProject Project, ManidocNode Node, string Path) ResolveByTitle(string projectName, string nodeTitle)
+    /// <summary>
+    /// projectName が null / 空ならワークスペース全体からノードを探す。
+    /// 読み取り側でこれを許すのは、利用者が「〇〇というノードの内容を教えて」と
+    /// プロジェクトを言わずに尋ねるのが自然だから。必須にしていた頃は、
+    /// LLM が埋めるものが無くて適当なプロジェクト名を捏造し、not found になっていた。
+    /// </summary>
+    private static (ManidocProject Project, ManidocNode Node, string Path) ResolveByTitle(string? projectName, string nodeTitle)
         => ResolveIn(MatchProjects(projectName), nodeTitle);
 
     /// <summary>
@@ -479,8 +493,86 @@ public class ManidocTools
             Comment = node.Comment ?? "",
         };
 
+    private static readonly Regex TitleLinkPattern =
+        new(@"\(#node-title:([^)]*)\)", RegexOptions.Compiled);
+
+    /// <summary>
+    /// <c>[表示テキスト](#node-title:ノードタイトル)</c> を <c>(#node:ノードID)</c> に解決する。
+    ///
+    /// LLM に 36 文字の GUID を転記させないための仕組み。カレンダーの日付リンクのように
+    /// 数十本のリンクを張る場面では、1 本の写し間違いが「見た目は正常なのにクリックしても
+    /// 飛ばない」という気づきにくい壊れ方になる。タイトルで書かせて ID の解決はサーバーが
+    /// 引き受ける。
+    ///
+    /// 1 つでも解決できなければ例外にして一切書き込まない。
+    /// 30 本正しくて 1 本壊れている状態が最も質が悪いため。
+    /// </summary>
+    private static string ResolveTitleLinks(ManidocProject project, string? content)
+    {
+        if (string.IsNullOrEmpty(content) || !content.Contains("#node-title:"))
+            return content ?? "";
+
+        var flat = WorkspaceService.FlattenNodes(project.RootNodes ?? []);
+        var problems = new List<string>();
+
+        var resolved = TitleLinkPattern.Replace(content, m =>
+        {
+            var title = m.Groups[1].Value.Trim();
+            if (title.Length == 0)
+            {
+                problems.Add("ノードタイトルが空です");
+                return m.Value;
+            }
+
+            var exact = flat.Where(n => n.Title.Equals(title, Ci)).ToList();
+            var hits = exact.Count > 0
+                ? exact
+                : flat.Where(n => n.Title.Contains(title, Ci)).ToList();
+
+            if (hits.Count == 0)
+            {
+                problems.Add($"\"{title}\" というノードが \"{project.Name}\" にありません");
+                return m.Value;
+            }
+            if (hits.Count > 1)
+            {
+                problems.Add(
+                    $"\"{title}\" は {hits.Count} 件に一致します: {NameList(hits.Select(h => h.Path), 5)}");
+                return m.Value;
+            }
+            return $"(#node:{hits[0].Id})";
+        });
+
+        if (problems.Count > 0)
+        {
+            throw new McpException(
+                "リンクを解決できないため保存しませんでした。" +
+                "#node-title: にはこのプロジェクト内のノードのタイトルを書いてください。\n- " +
+                string.Join("\n- ", problems.Distinct()));
+        }
+
+        return resolved;
+    }
+
+    /// <summary>プロジェクト内すべてのノードのタイトルリンクを解決する(取り込み時に使う)。</summary>
+    private static void ResolveTitleLinksInTree(ManidocProject project)
+    {
+        void Walk(List<ManidocNode> nodes)
+        {
+            foreach (var n in nodes)
+            {
+                n.Article = ResolveTitleLinks(project, n.Article);
+                n.Comment = ResolveTitleLinks(project, n.Comment);
+                if (n.Children?.Count > 0) Walk(n.Children);
+            }
+        }
+
+        Walk(project.RootNodes ?? []);
+    }
+
     private static SaveArticleResult Save(ManidocProject project, ManidocNode node, string content)
     {
+        content = ResolveTitleLinks(project, content);
         var previousLength = (node.Article ?? "").Length;
         node.Article = content;
         WorkspaceService.SaveProject(project);
