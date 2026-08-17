@@ -1,3 +1,4 @@
+using System.ComponentModel;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 
@@ -55,6 +56,17 @@ public class ManidocProject
     [JsonProperty("description")]
     public string Description { get; set; } = "";
 
+    // 一覧タイルの文字色 / 背景色。'#RRGGBB'、空文字なら既定(テーマ色)。
+    // 本家Manidocは知らないフィールドなので、空のときはJSONに出力しない
+    // （openManidoc と同じ作法。本家が読むJSONを不要に汚さないため）。
+    [JsonProperty("cardForeColor", DefaultValueHandling = DefaultValueHandling.Ignore)]
+    [DefaultValue("")]
+    public string CardForeColor { get; set; } = "";
+
+    [JsonProperty("cardBackColor", DefaultValueHandling = DefaultValueHandling.Ignore)]
+    [DefaultValue("")]
+    public string CardBackColor { get; set; } = "";
+
     [JsonProperty("rootNodes")]
     public List<ManidocNode> RootNodes { get; set; } = [];
 
@@ -62,6 +74,19 @@ public class ManidocProject
     // プロジェクト属性を、保存(save_article)時に失わないよう未知フィールドを往復させる。
     [JsonExtensionData]
     private IDictionary<string, JToken>? Extra { get; set; }
+}
+
+/// <summary>
+/// ワークスペースのタグ定義(名前 + 任意のサムネイル画像パス)。
+/// Manidoc の workspace.settings.json の tags[] と互換。
+/// </summary>
+public class TagDefinition
+{
+    [JsonProperty("name")]
+    public string Name { get; set; } = "";
+
+    [JsonProperty("imagePath")]
+    public string ImagePath { get; set; } = "";
 }
 
 public record FlatNode(string Id, string Title, string Path);

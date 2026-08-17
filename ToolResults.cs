@@ -43,6 +43,14 @@ public sealed class ProjectSummary
     [JsonPropertyName("tag")]
     [Description("User-defined tag; empty string when unset.")]
     public required string Tag { get; init; }
+
+    [JsonPropertyName("cardForeColor")]
+    [Description("Tile text color as #RRGGBB; empty string when unset (Manidoc uses the theme color).")]
+    public required string CardForeColor { get; init; }
+
+    [JsonPropertyName("cardBackColor")]
+    [Description("Tile background color as #RRGGBB; empty string when unset (Manidoc uses the theme color).")]
+    public required string CardBackColor { get; init; }
 }
 
 public sealed class ListProjectsResult
@@ -54,6 +62,74 @@ public sealed class ListProjectsResult
     [JsonPropertyName("count")]
     [Description("Number of projects returned.")]
     public required int Count { get; init; }
+}
+
+public sealed class SetProjectAttributesResult
+{
+    [JsonPropertyName("projectId")]
+    [Description("ID of the project that was updated.")]
+    public required string ProjectId { get; init; }
+
+    [JsonPropertyName("projectName")]
+    [Description("Name of the project that was updated.")]
+    public required string ProjectName { get; init; }
+
+    [JsonPropertyName("tag")]
+    [Description("The project's tag after the update; empty string when unset.")]
+    public required string Tag { get; init; }
+
+    [JsonPropertyName("cardForeColor")]
+    [Description("The tile text color after the update as #RRGGBB; empty string when unset.")]
+    public required string CardForeColor { get; init; }
+
+    [JsonPropertyName("cardBackColor")]
+    [Description("The tile background color after the update as #RRGGBB; empty string when unset.")]
+    public required string CardBackColor { get; init; }
+
+    [JsonPropertyName("tagDefined")]
+    [Description("Whether the assigned tag exists in the workspace tag definitions. null when the tag is empty. When false, call add_tag so the tag shows up in Manidoc.")]
+    public bool? TagDefined { get; init; }
+}
+
+public sealed class TagSummary
+{
+    [JsonPropertyName("name")]
+    [Description("Tag name.")]
+    public required string Name { get; init; }
+
+    [JsonPropertyName("imagePath")]
+    [Description("Absolute path to the tag's thumbnail image; empty string when none.")]
+    public required string ImagePath { get; init; }
+}
+
+public sealed class ListTagsResult
+{
+    [JsonPropertyName("tags")]
+    [Description("Tag definitions of the workspace.")]
+    public required IList<TagSummary> Tags { get; init; }
+
+    [JsonPropertyName("count")]
+    [Description("Number of tag definitions.")]
+    public required int Count { get; init; }
+}
+
+public sealed class AddTagResult
+{
+    [JsonPropertyName("name")]
+    [Description("Name of the tag.")]
+    public required string Name { get; init; }
+
+    [JsonPropertyName("imagePath")]
+    [Description("Thumbnail image path of the tag; empty string when none.")]
+    public required string ImagePath { get; init; }
+
+    [JsonPropertyName("created")]
+    [Description("true when a new tag was added; false when a tag with the same name already existed and was left unchanged.")]
+    public required bool Created { get; init; }
+
+    [JsonPropertyName("totalTags")]
+    [Description("Total number of tag definitions in the workspace after this call.")]
+    public required int TotalTags { get; init; }
 }
 
 public sealed class NodeSummary

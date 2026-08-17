@@ -119,6 +119,9 @@ bash installer/install.sh
 | `save_article` / `save_article_by_title` | ID / タイトル指定で記事を保存 | **上書き（destructive）** |
 | `import_markdown_as_project` | Markdown をプロジェクトとして一括インポート | 新規作成 |
 | `search_fulltext` | 全文検索 | 読み取り専用 |
+| `set_project_attributes` | プロジェクトのタグ・タイル色（`#RRGGBB`）を設定 | 更新（本文は不変） |
+| `list_tags` | ワークスペースのタグ定義一覧 | 読み取り専用 |
+| `add_tag` | タグ定義を追加 | 追加 |
 
 保存系ツールは既存の本文を丸ごと置き換えます。追記したい場合は先に `get_article` で現在の内容を取得してください。
 

@@ -60,6 +60,11 @@ builder.Services
               と書いてください。保存時にサーバーが同じプロジェクト内の該当ノードを探し、
               ノードIDへ置き換えます。**ノードIDを自分で書かないでください。**
               解決できないタイトルが1つでもあると保存されません(壊れたリンクを残さないため)。
+            - プロジェクトをタグやタイル色で整理するときは、list_projects が返す tag /
+              cardForeColor / cardBackColor を見て、set_project_attributes で変更します
+              (色は #RRGGBB、空文字で解除。指定した項目だけ変わり、最終更新日時は動きません)。
+              タグはまず list_tags で既存を確認し、無ければ add_tag で定義してから割り当てて
+              ください(未定義のタグ名は Manidoc のタグ管理に現れません)。
             - すべてのツールは structuredContent を返します。outputSchema を参照してください。
             """;
 

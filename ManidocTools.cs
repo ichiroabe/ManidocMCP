@@ -56,11 +56,22 @@ public class ManidocTools
         Idempotent = true,
         OpenWorld = false,
         UseStructuredContent = true)]
-    [Description("Returns a list of projects in the Manidoc workspace. Each entry includes id, name, and tag.")]
+    [Description("Returns a list of projects in the Manidoc workspace. Each entry includes id, name, tag and the tile colors (cardForeColor / cardBackColor). Use tag and the tile colors to organize the workspace, then change them with set_project_attributes.")]
     public ListProjectsResult ListProjects()
     {
-        var projects = WorkspaceService.GetAllProjects()
-            .Select(p => new ProjectSummary { Id = p.Id, Name = p.Name, Tag = p.Tag ?? "" })
+        var all = WorkspaceService.GetAllProjects();
+        // 本家に色フィールドを剥がされていても、ミラーの控えで補って返す。
+        WorkspaceService.FillColorsFromMirror(all);
+
+        var projects = all
+            .Select(p => new ProjectSummary
+            {
+                Id = p.Id,
+                Name = p.Name,
+                Tag = p.Tag ?? "",
+                CardForeColor = p.CardForeColor ?? "",
+                CardBackColor = p.CardBackColor ?? "",
+            })
             .ToList();
 
         return new ListProjectsResult { Projects = projects, Count = projects.Count };
@@ -337,7 +348,124 @@ public class ManidocTools
         };
     }
 
+    [McpServerTool(
+        Name = "set_project_attributes",
+        Title = "プロジェクト属性の設定（タグ・タイル色）",
+        ReadOnly = false,
+        Destructive = false,
+        Idempotent = true,
+        OpenWorld = false,
+        UseStructuredContent = true)]
+    [Description("Sets a project's tag and/or tile colors so you can organize the workspace. Identify the project by project_id (get it from list_projects). Only the parameters you pass are changed: omit one to leave it as-is, or pass an empty string to clear it. Colors are #RRGGBB (e.g. #4a90d9). Tags are just names — if the tag is not defined in the workspace yet, also call add_tag so it shows up in Manidoc. Article bodies and node structure are never touched, and the project's last-modified time is preserved.")]
+    public SetProjectAttributesResult SetProjectAttributes(
+        [Description("Project ID (get it from list_projects)")] string project_id,
+        [Description("Tag name to assign; empty string clears the tag. Omit to leave unchanged.")] string? tag = null,
+        [Description("Tile text color as #RRGGBB; empty string clears it. Omit to leave unchanged.")] string? card_fore_color = null,
+        [Description("Tile background color as #RRGGBB; empty string clears it. Omit to leave unchanged.")] string? card_back_color = null)
+    {
+        if (tag is null && card_fore_color is null && card_back_color is null)
+            throw new McpException("Nothing to change: pass at least one of tag, card_fore_color or card_back_color.");
+
+        var project = RequireProject(project_id);
+
+        // 現在の実効色(プロジェクトJSON→無ければミラーの控え)を起点に、指定された分だけ上書きする。
+        // こうしないと「片方の色だけ変更」でもう片方の控えを失う。
+        var mirror = WorkspaceService.LoadCardColors();
+        mirror.TryGetValue(project.Id, out var saved);
+        var curFore = !string.IsNullOrEmpty(project.CardForeColor) ? project.CardForeColor : saved.Fore ?? "";
+        var curBack = !string.IsNullOrEmpty(project.CardBackColor) ? project.CardBackColor : saved.Back ?? "";
+
+        var finalFore = card_fore_color is null ? curFore : NormalizeColor(card_fore_color, "card_fore_color");
+        var finalBack = card_back_color is null ? curBack : NormalizeColor(card_back_color, "card_back_color");
+
+        if (tag is not null) project.Tag = tag;
+        project.CardForeColor = finalFore;
+        project.CardBackColor = finalBack;
+
+        // 属性変更は本文編集ではないので lastModifiedAt を動かさない。
+        WorkspaceService.SaveProject(project, touch: false);
+        // 本家Manidoc は未知フィールド(色)を保存時に落とすため、控えをミラーに残す。
+        WorkspaceService.UpdateCardColor(project.Id, finalFore, finalBack);
+
+        bool? tagDefined = string.IsNullOrEmpty(project.Tag)
+            ? null
+            : WorkspaceService.GetTags().Any(t => t.Name.Equals(project.Tag, Ci));
+
+        return new SetProjectAttributesResult
+        {
+            ProjectId = project.Id,
+            ProjectName = project.Name,
+            Tag = project.Tag ?? "",
+            CardForeColor = finalFore,
+            CardBackColor = finalBack,
+            TagDefined = tagDefined,
+        };
+    }
+
+    [McpServerTool(
+        Name = "list_tags",
+        Title = "タグ定義の一覧",
+        ReadOnly = true,
+        Idempotent = true,
+        OpenWorld = false,
+        UseStructuredContent = true)]
+    [Description("Returns the tag definitions of the workspace (name and optional thumbnail image path), as shown in Manidoc's tag manager. Check this before assigning tags with set_project_attributes so you reuse existing tags instead of inventing new names.")]
+    public ListTagsResult ListTags()
+    {
+        var tags = WorkspaceService.GetTags()
+            .Select(t => new TagSummary { Name = t.Name, ImagePath = t.ImagePath })
+            .ToList();
+
+        return new ListTagsResult { Tags = tags, Count = tags.Count };
+    }
+
+    [McpServerTool(
+        Name = "add_tag",
+        Title = "タグ定義の追加",
+        ReadOnly = false,
+        Destructive = false,
+        Idempotent = true,
+        OpenWorld = false,
+        UseStructuredContent = true)]
+    [Description("Adds a new tag definition to the workspace so it can be assigned to projects with set_project_attributes. If a tag with the same name already exists it is left unchanged (created=false). image_path is an optional absolute path to a thumbnail image.")]
+    public AddTagResult AddTag(
+        [Description("Tag name")] string name,
+        [Description("Absolute path to a thumbnail image (optional)")] string? image_path = null)
+    {
+        if (string.IsNullOrWhiteSpace(name))
+            throw new McpException("name is empty.");
+
+        var tags = WorkspaceService.GetTags();
+        var existing = tags.FirstOrDefault(t => t.Name.Equals(name, Ci));
+        var created = existing is null;
+        if (created)
+        {
+            tags.Add(new TagDefinition { Name = name, ImagePath = image_path ?? "" });
+            WorkspaceService.SaveTags(tags);
+        }
+
+        return new AddTagResult
+        {
+            Name = existing?.Name ?? name,
+            ImagePath = existing?.ImagePath ?? image_path ?? "",
+            Created = created,
+            TotalTags = tags.Count,
+        };
+    }
+
     // --- ヘルパー ---
+
+    private static readonly Regex ColorPattern = new(@"^#[0-9a-fA-F]{6}$", RegexOptions.Compiled);
+
+    /// <summary>色を検証する。空文字は「解除」としてそのまま通す。#RRGGBB 以外は例外。</summary>
+    private static string NormalizeColor(string value, string field)
+    {
+        if (value.Length == 0) return "";
+        if (!ColorPattern.IsMatch(value))
+            throw new McpException(
+                $"{field} must be a hex color like #4a90d9 (#RRGGBB), or an empty string to clear it. Got: \"{value}\".");
+        return value;
+    }
 
     /// <summary>
     /// 0 件のときこそヒントが要る。小型モデルは 0 件を「情報が存在しない」と受け取って
